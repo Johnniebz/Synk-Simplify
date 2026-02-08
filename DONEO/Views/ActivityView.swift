@@ -94,11 +94,58 @@ final class ActivityViewModel {
     var overdueCount: Int { overdueTasks.count }
 }
 
+// MARK: - Filter Type
+
+enum TaskFilter: String, CaseIterable {
+    case all = "Todas"
+    case overdue = "Atrasadas"
+    case today = "Para Hoy"
+    case thisWeek = "Esta Semana"
+    case later = "Más Adelante"
+}
+
+enum TaskSort: String, CaseIterable {
+    case dueDate = "Fecha"
+    case project = "Proyecto"
+    case title = "Nombre"
+}
+
 // MARK: - Activity View
 
 struct ActivityView: View {
     @State private var viewModel = ActivityViewModel()
     @State private var navigationPath = NavigationPath()
+    @State private var selectedFilter: TaskFilter = .all
+    @State private var selectedSort: TaskSort = .dueDate
+    @State private var showingSortOptions = false
+
+    // Filtered tasks based on selection
+    private var filteredTasks: [ActivityViewModel.TaskItem] {
+        let tasks: [ActivityViewModel.TaskItem]
+
+        switch selectedFilter {
+        case .all:
+            tasks = viewModel.myPendingTasks
+        case .overdue:
+            tasks = viewModel.overdueTasks
+        case .today:
+            tasks = viewModel.todayTasks
+        case .thisWeek:
+            tasks = viewModel.thisWeekTasks
+        case .later:
+            tasks = viewModel.laterTasks
+        }
+
+        // Apply sorting
+        switch selectedSort {
+        case .dueDate:
+            return tasks.sorted { ($0.task.dueDate ?? .distantFuture) < ($1.task.dueDate ?? .distantFuture) }
+        case .project:
+            return tasks.sorted { $0.project.name < $1.project.name }
+        case .title:
+            return tasks.sorted { $0.task.title < $1.task.title }
+        }
+    }
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -106,13 +153,19 @@ struct ActivityView: View {
                 VStack(spacing: 0) {
                     // Header with greeting
                     headerSection
-                        .padding(.bottom, 20)
+                        .padding(.bottom, 16)
+
+                    // Filter and sort bar
+                    filterSortBar
+                        .padding(.bottom, 16)
 
                     // Main content
                     if viewModel.totalPending == 0 {
                         emptyState
+                    } else if filteredTasks.isEmpty {
+                        emptyFilterState
                     } else {
-                        tasksContent
+                        filteredTasksContent
                     }
                 }
                 .padding(.bottom, 40)
@@ -124,6 +177,14 @@ struct ActivityView: View {
                 if let project = viewModel.getProject(id: projectId) {
                     ProjectChatView(project: project)
                 }
+            }
+            .confirmationDialog("Ordenar por", isPresented: $showingSortOptions) {
+                ForEach(TaskSort.allCases, id: \.self) { sort in
+                    Button(sort.rawValue) {
+                        selectedSort = sort
+                    }
+                }
+                Button("Cancelar", role: .cancel) { }
             }
         }
     }
@@ -157,46 +218,128 @@ struct ActivityView: View {
             .padding(.horizontal, 20)
             .padding(.top, 10)
 
-            // Quick stats
+            // Quick stats (tappable filters)
             HStack(spacing: 12) {
                 quickStatCard(
                     count: viewModel.totalPending,
                     label: "Pendientes",
-                    color: Theme.primary
+                    color: Theme.primary,
+                    filter: .all
                 )
 
                 if viewModel.overdueCount > 0 {
                     quickStatCard(
                         count: viewModel.overdueCount,
                         label: "Atrasadas",
-                        color: .red
+                        color: .red,
+                        filter: .overdue
                     )
                 }
 
                 quickStatCard(
                     count: viewModel.todayTasks.count,
                     label: "Para Hoy",
-                    color: .orange
+                    color: .orange,
+                    filter: .today
                 )
             }
             .padding(.horizontal, 20)
         }
     }
 
-    private func quickStatCard(count: Int, label: String, color: Color) -> some View {
-        VStack(spacing: 4) {
-            Text("\(count)")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(color)
+    private func quickStatCard(count: Int, label: String, color: Color, filter: TaskFilter) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                if selectedFilter == filter {
+                    selectedFilter = .all
+                } else {
+                    selectedFilter = filter
+                }
+            }
+        } label: {
+            VStack(spacing: 4) {
+                Text("\(count)")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(selectedFilter == filter ? .white : color)
 
-            Text(label)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
+                Text(label)
+                    .font(.system(size: 12))
+                    .foregroundStyle(selectedFilter == filter ? .white.opacity(0.9) : .secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(selectedFilter == filter ? color : Color(uiColor: .secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(Color(uiColor: .secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Filter & Sort Bar
+
+    private var filterSortBar: some View {
+        HStack {
+            // Filter pills
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    filterPill(.all, count: viewModel.totalPending)
+
+                    if viewModel.overdueCount > 0 {
+                        filterPill(.overdue, count: viewModel.overdueCount)
+                    }
+
+                    filterPill(.today, count: viewModel.todayTasks.count)
+                    filterPill(.thisWeek, count: viewModel.thisWeekTasks.count)
+                    filterPill(.later, count: viewModel.laterTasks.count)
+                }
+                .padding(.horizontal, 20)
+            }
+
+            // Sort button
+            Button {
+                showingSortOptions = true
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .font(.system(size: 12))
+                    Text(selectedSort.rawValue)
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .foregroundStyle(Theme.primary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Theme.primaryLight)
+                .clipShape(Capsule())
+            }
+            .padding(.trailing, 20)
+        }
+    }
+
+    private func filterPill(_ filter: TaskFilter, count: Int) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedFilter = filter
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(filter.rawValue)
+                    .font(.system(size: 13, weight: .medium))
+
+                if count > 0 {
+                    Text("\(count)")
+                        .font(.system(size: 12, weight: .semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(selectedFilter == filter ? Color.white.opacity(0.3) : Color.secondary.opacity(0.2))
+                        .clipShape(Capsule())
+                }
+            }
+            .foregroundStyle(selectedFilter == filter ? .white : .primary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(selectedFilter == filter ? Theme.primary : Color(uiColor: .secondarySystemGroupedBackground))
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     private var greetingText: String {
@@ -206,54 +349,94 @@ struct ActivityView: View {
         return "Buenas noches"
     }
 
-    // MARK: - Tasks Content
+    // MARK: - Filtered Tasks Content
 
-    private var tasksContent: some View {
-        VStack(spacing: 24) {
-            // Overdue - Urgent!
-            if !viewModel.overdueTasks.isEmpty {
-                taskSection(
-                    icon: "exclamationmark.triangle.fill",
-                    title: "Atrasadas",
-                    subtitle: "Requieren atención inmediata",
-                    tasks: viewModel.overdueTasks,
-                    urgencyColor: .red
-                )
-            }
+    private var filteredTasksContent: some View {
+        VStack(spacing: 12) {
+            // Results header
+            HStack {
+                Text("\(filteredTasks.count) tarea\(filteredTasks.count == 1 ? "" : "s")")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.secondary)
 
-            // Today
-            if !viewModel.todayTasks.isEmpty {
-                taskSection(
-                    icon: "clock.fill",
-                    title: "Para Hoy",
-                    subtitle: "Vencen hoy",
-                    tasks: viewModel.todayTasks,
-                    urgencyColor: .orange
-                )
-            }
+                Spacer()
 
-            // This week
-            if !viewModel.thisWeekTasks.isEmpty {
-                taskSection(
-                    icon: "calendar",
-                    title: "Esta Semana",
-                    subtitle: "Próximos 7 días",
-                    tasks: viewModel.thisWeekTasks,
-                    urgencyColor: Theme.primary
-                )
+                if selectedFilter != .all {
+                    Button {
+                        withAnimation {
+                            selectedFilter = .all
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 12))
+                            Text("Limpiar filtro")
+                                .font(.system(size: 13))
+                        }
+                        .foregroundStyle(Theme.primary)
+                    }
+                }
             }
+            .padding(.horizontal, 20)
 
-            // Later
-            if !viewModel.laterTasks.isEmpty {
-                taskSection(
-                    icon: "tray.full",
-                    title: "Más Adelante",
-                    subtitle: "Sin fecha próxima",
-                    tasks: viewModel.laterTasks,
-                    urgencyColor: .secondary
-                )
+            // Task cards
+            VStack(spacing: 10) {
+                ForEach(filteredTasks) { item in
+                    ActivityTaskCard(
+                        item: item,
+                        urgencyColor: urgencyColor(for: item),
+                        onGoToChat: {
+                            navigationPath.append(item.project.id)
+                        }
+                    )
+                }
             }
+            .padding(.horizontal, 16)
         }
+    }
+
+    private func urgencyColor(for item: ActivityViewModel.TaskItem) -> Color {
+        if item.task.isOverdue { return .red }
+        if item.task.isDueToday { return .orange }
+        return Theme.primary
+    }
+
+    // MARK: - Empty Filter State
+
+    private var emptyFilterState: some View {
+        VStack(spacing: 16) {
+            Spacer().frame(height: 40)
+
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.system(size: 50))
+                .foregroundStyle(.secondary.opacity(0.5))
+
+            VStack(spacing: 8) {
+                Text("Sin tareas")
+                    .font(.system(size: 18, weight: .semibold))
+
+                Text("No hay tareas en esta categoría")
+                    .font(.system(size: 15))
+                    .foregroundStyle(.secondary)
+            }
+
+            Button {
+                withAnimation {
+                    selectedFilter = .all
+                }
+            } label: {
+                Text("Ver todas")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .background(Theme.primary)
+                    .clipShape(Capsule())
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Task Section
