@@ -333,6 +333,7 @@ struct AddTaskSheet: View {
 
     // Task fields
     @State private var taskTitle = ""
+    @State private var taskLocation = ""
     @State private var selectedAssigneeIds: Set<UUID> = []
     @State private var dueDate: Date? = nil
     @State private var showingDatePicker = false
@@ -396,31 +397,16 @@ struct AddTaskSheet: View {
         viewModel.currentUser
     }
 
-    // Get current project name
-    private var currentProjectName: String {
-        if isStandaloneMode, let projectId = selectedProjectId,
-           let project = availableProjects.first(where: { $0.id == projectId }) {
-            return project.name
-        }
-        return viewModel.project.name
-    }
-
-    private var currentProjectInitials: String {
-        if isStandaloneMode, let projectId = selectedProjectId,
-           let project = availableProjects.first(where: { $0.id == projectId }) {
-            return project.initials
-        }
-        return viewModel.project.initials
-    }
-
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    // Project section - always show
-                    projectSection
+                    // Project selection (only in standalone mode)
+                    if isStandaloneMode {
+                        projectSection
+                    }
 
-                    // Task title
+                    // Task title and location
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Tarea")
                             .font(.system(size: 13, weight: .medium))
@@ -432,6 +418,14 @@ struct AddTaskSheet: View {
                             .background(Color(uiColor: .secondarySystemBackground))
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                             .focused($focusedField, equals: .title)
+
+                        // Project/location context field
+                        TextField("Ej: Edificio Centro, Cocina principal...", text: $taskLocation)
+                            .font(.system(size: 15))
+                            .foregroundStyle(.secondary)
+                            .padding(14)
+                            .background(Color(uiColor: .secondarySystemBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
 
                     // Assignees as chips
@@ -750,63 +744,41 @@ struct AddTaskSheet: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
 
-            if isStandaloneMode {
-                // Selectable projects for standalone mode
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(availableProjects) { project in
-                            let isSelected = selectedProjectId == project.id
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    selectedProjectId = project.id
-                                    // Clear assignee selection when project changes
-                                    selectedAssigneeIds.removeAll()
-                                }
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Circle()
-                                        .fill(isSelected ? Color.white.opacity(0.3) : Theme.primaryLight)
-                                        .frame(width: 32, height: 32)
-                                        .overlay {
-                                            Text(project.initials)
-                                                .font(.system(size: 11, weight: .bold))
-                                                .foregroundStyle(isSelected ? .white : Theme.primary)
-                                        }
-
-                                    Text(project.name)
-                                        .font(.system(size: 14, weight: .medium))
-                                        .lineLimit(1)
-                                }
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
-                                .background(isSelected ? Theme.primary : Color(uiColor: .secondarySystemBackground))
-                                .foregroundStyle(isSelected ? .white : .primary)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
+            // Selectable projects for standalone mode
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(availableProjects) { project in
+                        let isSelected = selectedProjectId == project.id
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedProjectId = project.id
+                                // Clear assignee selection when project changes
+                                selectedAssigneeIds.removeAll()
                             }
-                            .buttonStyle(.plain)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(isSelected ? Color.white.opacity(0.3) : Theme.primaryLight)
+                                    .frame(width: 32, height: 32)
+                                    .overlay {
+                                        Text(project.initials)
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundStyle(isSelected ? .white : Theme.primary)
+                                    }
+
+                                Text(project.name)
+                                    .font(.system(size: 14, weight: .medium))
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(isSelected ? Theme.primary : Color(uiColor: .secondarySystemBackground))
+                            .foregroundStyle(isSelected ? .white : .primary)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
+                        .buttonStyle(.plain)
                     }
                 }
-            } else {
-                // Display-only project name when in project context
-                HStack(spacing: 10) {
-                    Circle()
-                        .fill(Theme.primaryLight)
-                        .frame(width: 36, height: 36)
-                        .overlay {
-                            Text(currentProjectInitials)
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(Theme.primary)
-                        }
-
-                    Text(currentProjectName)
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(.primary)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color(uiColor: .secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
             }
         }
     }
@@ -823,7 +795,18 @@ struct AddTaskSheet: View {
                 createdBy: currentUser
             )
         }
+
+        // Combine location and notes
+        let locationText = taskLocation.trimmingCharacters(in: .whitespacesAndNewlines)
         let notesText = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        var finalNotes: String? = nil
+        if !locationText.isEmpty && !notesText.isEmpty {
+            finalNotes = "📍 \(locationText)\n\n\(notesText)"
+        } else if !locationText.isEmpty {
+            finalNotes = "📍 \(locationText)"
+        } else if !notesText.isEmpty {
+            finalNotes = notesText
+        }
 
         // Create attachments for the task
         let taskAttachments = attachments.map { att in
@@ -841,7 +824,7 @@ struct AddTaskSheet: View {
             assignees: assignees,
             subtasks: subtaskList,
             dueDate: dueDate,
-            notes: notesText.isEmpty ? nil : notesText,
+            notes: finalNotes,
             attachments: taskAttachments
         )
         dismiss()
