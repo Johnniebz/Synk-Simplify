@@ -7,9 +7,12 @@ struct ProjectChatView: View {
     @State private var showingAddTask = false
     @State private var showingTasks = true  // Start expanded
     @State private var messageText = ""
-    @State private var selectedTask: DONEOTask? = nil  // For task info sheet
+    @State private var selectedTaskForNavigation: DONEOTask? = nil  // For navigation to task detail
     @State private var quotedMessage: Message? = nil   // For quoting messages
     @State private var quotedTask: DONEOTask? = nil    // For quoting/referencing tasks
+    @State private var showingAttachmentOptions = false
+    @State private var showingImagePicker = false
+    @State private var selectedPhotoItem: PhotosPickerItem? = nil
     @FocusState private var isInputFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
@@ -36,27 +39,52 @@ struct ProjectChatView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                headerView
-            }
-            ToolbarItem(placement: .topBarTrailing) {
+                // Tappable header - navigates to info screen
                 Button {
                     showingProjectInfo = true
                 } label: {
-                    Image(systemName: "info.circle")
-                        .font(.system(size: 18))
-                        .foregroundStyle(Theme.primary)
+                    headerView
                 }
+                .buttonStyle(.plain)
             }
         }
         .toolbar(.hidden, for: .tabBar)
-        .sheet(isPresented: $showingProjectInfo) {
-            ProjectInfoSheet(viewModel: viewModel)
+        .navigationDestination(isPresented: $showingProjectInfo) {
+            ProjectInfoView(viewModel: viewModel)
+        }
+        .navigationDestination(item: $selectedTaskForNavigation) { task in
+            TaskDetailView(task: task, viewModel: viewModel)
         }
         .sheet(isPresented: $showingAddTask) {
             SimpleAddTaskSheet(viewModel: viewModel)
         }
-        .sheet(item: $selectedTask) { task in
-            SimpleTaskInfoSheet(task: task, viewModel: viewModel)
+        .confirmationDialog("Adjuntar", isPresented: $showingAttachmentOptions) {
+            Button {
+                showingImagePicker = true
+            } label: {
+                Label("Fotos y Videos", systemImage: "photo.on.rectangle")
+            }
+            Button {
+                // Camera
+            } label: {
+                Label("Cámara", systemImage: "camera")
+            }
+            Button {
+                // Document
+            } label: {
+                Label("Documento", systemImage: "doc")
+            }
+            Button("Cancelar", role: .cancel) { }
+        }
+        .photosPicker(isPresented: $showingImagePicker, selection: $selectedPhotoItem, matching: .images)
+        .onChange(of: selectedPhotoItem) { _, newValue in
+            Task {
+                if let item = newValue,
+                   let data = try? await item.loadTransferable(type: Data.self) {
+                    viewModel.sendImageMessage(imageData: data, caption: "")
+                }
+                selectedPhotoItem = nil
+            }
         }
     }
 
@@ -143,7 +171,7 @@ struct ProjectChatView: View {
         List {
             ForEach(sortedTasks) { task in
                 SimpleTaskRow(task: task, viewModel: viewModel, onTap: {
-                    selectedTask = task
+                    selectedTaskForNavigation = task
                 })
                 .listRowInsets(EdgeInsets())
                 .listRowSeparator(.hidden)
@@ -285,7 +313,19 @@ struct ProjectChatView: View {
                 .background(Color(uiColor: .secondarySystemBackground))
             }
 
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
+                // + Attachment button
+                Button {
+                    showingAttachmentOptions = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(Theme.primary)
+                        .frame(width: 36, height: 36)
+                        .background(Color(uiColor: .secondarySystemBackground))
+                        .clipShape(Circle())
+                }
+
                 // Text field
                 TextField("Mensaje...", text: $messageText)
                     .textFieldStyle(.plain)
@@ -296,17 +336,35 @@ struct ProjectChatView: View {
                     .background(Color(uiColor: .secondarySystemBackground))
                     .clipShape(RoundedRectangle(cornerRadius: 20))
 
-                // Send button
+                // Camera button
                 Button {
-                    sendMessage()
+                    // Camera action
                 } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 32))
-                        .foregroundStyle(messageText.trimmingCharacters(in: .whitespaces).isEmpty ? Color.secondary.opacity(0.3) : Theme.primary)
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(Theme.primary)
                 }
-                .disabled(messageText.trimmingCharacters(in: .whitespaces).isEmpty)
+
+                // Mic or Send button
+                if messageText.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Button {
+                        // Voice recording
+                    } label: {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(Theme.primary)
+                    }
+                } else {
+                    Button {
+                        sendMessage()
+                    } label: {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundStyle(Theme.primary)
+                    }
+                }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 12)
             .padding(.vertical, 10)
         }
         .background(Color(uiColor: .systemBackground))
@@ -584,72 +642,201 @@ struct SimpleTaskInfoSheet: View {
     }
 }
 
-// MARK: - Project Info Sheet
+// MARK: - Project Info View (WhatsApp style)
 
-struct ProjectInfoSheet: View {
+struct ProjectInfoView: View {
     @Bindable var viewModel: ProjectChatViewModel
-    @Environment(\.dismiss) private var dismiss
+
+    private var mediaCount: Int {
+        viewModel.project.attachments.count
+    }
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    VStack(spacing: 12) {
-                        Circle()
-                            .fill(Theme.primaryLight)
-                            .frame(width: 80, height: 80)
-                            .overlay {
-                                Text(viewModel.project.initials)
-                                    .font(.system(size: 28, weight: .bold))
-                                    .foregroundStyle(Theme.primary)
-                            }
-
-                        Text(viewModel.project.name)
-                            .font(.system(size: 20, weight: .bold))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                }
-
-                Section("Miembros") {
-                    ForEach(viewModel.project.members) { member in
-                        HStack(spacing: 12) {
-                            Circle()
-                                .fill(Theme.primaryLight)
-                                .frame(width: 40, height: 40)
-                                .overlay {
-                                    Text(member.avatarInitials)
-                                        .font(.system(size: 14, weight: .bold))
-                                        .foregroundStyle(Theme.primary)
-                                }
-
-                            VStack(alignment: .leading) {
-                                Text(member.displayName)
-                                    .font(.system(size: 15, weight: .medium))
-                                Text(member.phoneNumber)
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(.secondary)
-                            }
+        List {
+            // Header section with avatar
+            Section {
+                VStack(spacing: 16) {
+                    Circle()
+                        .fill(Theme.primaryLight)
+                        .frame(width: 100, height: 100)
+                        .overlay {
+                            Text(viewModel.project.initials)
+                                .font(.system(size: 36, weight: .bold))
+                                .foregroundStyle(Theme.primary)
                         }
+
+                    VStack(spacing: 4) {
+                        Text(viewModel.project.name)
+                            .font(.system(size: 22, weight: .bold))
+
+                        Text("Proyecto · \(viewModel.project.members.count) miembros")
+                            .font(.system(size: 15))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .listRowBackground(Color.clear)
+            }
+
+            // Action buttons (Audio, Video, Search)
+            Section {
+                HStack(spacing: 20) {
+                    Spacer()
+                    actionButton(icon: "phone.fill", title: "Audio")
+                    actionButton(icon: "video.fill", title: "Video")
+                    actionButton(icon: "magnifyingglass", title: "Buscar")
+                    Spacer()
+                }
+                .listRowBackground(Color.clear)
+            }
+
+            // Media, links and docs
+            Section {
+                NavigationLink {
+                    Text("Multimedia y Documentos")
+                } label: {
+                    HStack {
+                        Image(systemName: "photo.fill")
+                            .foregroundStyle(.secondary)
+                        Text("Multimedia y documentos")
+                        Spacer()
+                        Text("\(mediaCount)")
+                            .foregroundStyle(.secondary)
                     }
                 }
 
-                Section {
+                NavigationLink {
+                    Text("Mensajes destacados")
+                } label: {
                     HStack {
-                        Text("Tareas completadas")
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(.secondary)
+                        Text("Destacados")
                         Spacer()
-                        Text("\(viewModel.completedTasks.count)/\(viewModel.tasks.count)")
+                        Text("Ninguno")
                             .foregroundStyle(.secondary)
                     }
                 }
             }
-            .navigationTitle("Info del Proyecto")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Listo") { dismiss() }
+
+            // Tasks section
+            Section {
+                HStack {
+                    Image(systemName: "checklist")
+                        .foregroundStyle(.secondary)
+                    Text("Tareas completadas")
+                    Spacer()
+                    Text("\(viewModel.completedTasks.count)/\(viewModel.tasks.count)")
+                        .foregroundStyle(.secondary)
                 }
             }
+
+            // Settings section
+            Section {
+                HStack {
+                    Image(systemName: "bell.fill")
+                        .foregroundStyle(.secondary)
+                    Text("Notificaciones")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                }
+
+                HStack {
+                    Image(systemName: "photo.on.rectangle")
+                        .foregroundStyle(.secondary)
+                    Text("Guardar en Fotos")
+                    Spacer()
+                    Text("Por defecto")
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
+            // Members section
+            Section {
+                ForEach(viewModel.project.members) { member in
+                    HStack(spacing: 12) {
+                        Circle()
+                            .fill(Theme.primaryLight)
+                            .frame(width: 44, height: 44)
+                            .overlay {
+                                Text(member.avatarInitials)
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(Theme.primary)
+                            }
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(member.displayName)
+                                .font(.system(size: 16, weight: .medium))
+                            Text(member.phoneNumber)
+                                .font(.system(size: 14))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            } header: {
+                Text("\(viewModel.project.members.count) participantes")
+            }
+
+            // Privacy section
+            Section {
+                HStack {
+                    Image(systemName: "lock.fill")
+                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Cifrado")
+                        Text("Los mensajes están cifrados de extremo a extremo")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            // Danger zone
+            Section {
+                Button(role: .destructive) {
+                    // Clear chat action
+                } label: {
+                    HStack {
+                        Spacer()
+                        Text("Vaciar chat")
+                        Spacer()
+                    }
+                }
+
+                Button(role: .destructive) {
+                    // Leave project action
+                } label: {
+                    HStack {
+                        Spacer()
+                        Text("Salir del proyecto")
+                        Spacer()
+                    }
+                }
+            }
+        }
+        .navigationTitle("Info del Proyecto")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func actionButton(icon: String, title: String) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 18))
+                .foregroundStyle(Theme.primary)
+                .frame(width: 50, height: 50)
+                .background(Color(uiColor: .secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+            Text(title)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
         }
     }
 }
