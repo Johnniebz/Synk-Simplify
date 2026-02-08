@@ -396,14 +396,29 @@ struct AddTaskSheet: View {
         viewModel.currentUser
     }
 
+    // Get current project name
+    private var currentProjectName: String {
+        if isStandaloneMode, let projectId = selectedProjectId,
+           let project = availableProjects.first(where: { $0.id == projectId }) {
+            return project.name
+        }
+        return viewModel.project.name
+    }
+
+    private var currentProjectInitials: String {
+        if isStandaloneMode, let projectId = selectedProjectId,
+           let project = availableProjects.first(where: { $0.id == projectId }) {
+            return project.initials
+        }
+        return viewModel.project.initials
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    // Project selection (only in standalone mode)
-                    if isStandaloneMode {
-                        projectSection
-                    }
+                    // Project section - always show
+                    projectSection
 
                     // Task title
                     VStack(alignment: .leading, spacing: 8) {
@@ -735,40 +750,63 @@ struct AddTaskSheet: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(availableProjects) { project in
-                        let isSelected = selectedProjectId == project.id
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                selectedProjectId = project.id
-                                // Clear assignee selection when project changes
-                                selectedAssigneeIds.removeAll()
-                            }
-                        } label: {
-                            HStack(spacing: 8) {
-                                Circle()
-                                    .fill(isSelected ? Color.white.opacity(0.3) : Theme.primaryLight)
-                                    .frame(width: 32, height: 32)
-                                    .overlay {
-                                        Text(project.initials)
-                                            .font(.system(size: 11, weight: .bold))
-                                            .foregroundStyle(isSelected ? .white : Theme.primary)
-                                    }
+            if isStandaloneMode {
+                // Selectable projects for standalone mode
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(availableProjects) { project in
+                            let isSelected = selectedProjectId == project.id
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    selectedProjectId = project.id
+                                    // Clear assignee selection when project changes
+                                    selectedAssigneeIds.removeAll()
+                                }
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Circle()
+                                        .fill(isSelected ? Color.white.opacity(0.3) : Theme.primaryLight)
+                                        .frame(width: 32, height: 32)
+                                        .overlay {
+                                            Text(project.initials)
+                                                .font(.system(size: 11, weight: .bold))
+                                                .foregroundStyle(isSelected ? .white : Theme.primary)
+                                        }
 
-                                Text(project.name)
-                                    .font(.system(size: 14, weight: .medium))
-                                    .lineLimit(1)
+                                    Text(project.name)
+                                        .font(.system(size: 14, weight: .medium))
+                                        .lineLimit(1)
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(isSelected ? Theme.primary : Color(uiColor: .secondarySystemBackground))
+                                .foregroundStyle(isSelected ? .white : .primary)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
                             }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(isSelected ? Theme.primary : Color(uiColor: .secondarySystemBackground))
-                            .foregroundStyle(isSelected ? .white : .primary)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
+            } else {
+                // Display-only project name when in project context
+                HStack(spacing: 10) {
+                    Circle()
+                        .fill(Theme.primaryLight)
+                        .frame(width: 36, height: 36)
+                        .overlay {
+                            Text(currentProjectInitials)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(Theme.primary)
+                        }
+
+                    Text(currentProjectName)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.primary)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color(uiColor: .secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
             }
         }
     }
