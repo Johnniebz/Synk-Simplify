@@ -7,6 +7,8 @@ struct ProjectChatView: View {
     @State private var showingAddTask = false
     @State private var showingTasks = true  // Start expanded
     @State private var messageText = ""
+    @State private var selectedTask: DONEOTask? = nil  // For task info sheet
+    @State private var quotedMessage: Message? = nil   // For quoting messages
     @FocusState private var isInputFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
@@ -51,6 +53,9 @@ struct ProjectChatView: View {
         }
         .sheet(isPresented: $showingAddTask) {
             SimpleAddTaskSheet(viewModel: viewModel)
+        }
+        .sheet(item: $selectedTask) { task in
+            SimpleTaskInfoSheet(task: task, viewModel: viewModel)
         }
     }
 
@@ -136,7 +141,9 @@ struct ProjectChatView: View {
     private var tasksList: some View {
         VStack(spacing: 0) {
             ForEach(sortedTasks) { task in
-                SimpleTaskRow(task: task, viewModel: viewModel)
+                SimpleTaskRow(task: task, viewModel: viewModel, onTap: {
+                    selectedTask = task
+                })
 
                 if task.id != sortedTasks.last?.id {
                     Divider()
@@ -158,8 +165,11 @@ struct ProjectChatView: View {
                         emptyChat
                     } else {
                         ForEach(viewModel.messages) { message in
-                            SimpleChatBubble(message: message, viewModel: viewModel)
-                                .id(message.id)
+                            SimpleChatBubble(message: message, viewModel: viewModel, onQuote: {
+                                quotedMessage = message
+                                isInputFocused = true
+                            })
+                            .id(message.id)
                         }
                     }
                 }
@@ -193,37 +203,75 @@ struct ProjectChatView: View {
     // MARK: - Message Input
 
     private var messageInputBar: some View {
-        HStack(spacing: 12) {
-            // Text field
-            TextField("Mensaje...", text: $messageText)
-                .textFieldStyle(.plain)
-                .font(.system(size: 15))
-                .focused($isInputFocused)
+        VStack(spacing: 0) {
+            // Quoted message preview
+            if let quoted = quotedMessage {
+                HStack(spacing: 10) {
+                    Rectangle()
+                        .fill(Theme.primary)
+                        .frame(width: 3)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(quoted.sender.displayFirstName)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Theme.primary)
+                        Text(quoted.content)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        quotedMessage = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(Color.secondary.opacity(0.5))
+                    }
+                }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
                 .background(Color(uiColor: .secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 20))
-
-            // Send button
-            Button {
-                sendMessage()
-            } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 32))
-                    .foregroundStyle(messageText.trimmingCharacters(in: .whitespaces).isEmpty ? Color.secondary.opacity(0.3) : Theme.primary)
             }
-            .disabled(messageText.trimmingCharacters(in: .whitespaces).isEmpty)
+
+            HStack(spacing: 12) {
+                // Text field
+                TextField("Mensaje...", text: $messageText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 15))
+                    .focused($isInputFocused)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color(uiColor: .secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+
+                // Send button
+                Button {
+                    sendMessage()
+                } label: {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 32))
+                        .foregroundStyle(messageText.trimmingCharacters(in: .whitespaces).isEmpty ? Color.secondary.opacity(0.3) : Theme.primary)
+                }
+                .disabled(messageText.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
         .background(Color(uiColor: .systemBackground))
     }
 
     private func sendMessage() {
         let text = messageText.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
-        viewModel.sendMessage(content: text)
+
+        let quoted = quotedMessage.map { QuotedMessage(message: $0) }
+        viewModel.sendMessage(content: text, quotedMessage: quoted)
+
         messageText = ""
+        quotedMessage = nil
     }
 }
 
@@ -232,6 +280,7 @@ struct ProjectChatView: View {
 struct SimpleTaskRow: View {
     let task: DONEOTask
     @Bindable var viewModel: ProjectChatViewModel
+    var onTap: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -245,43 +294,50 @@ struct SimpleTaskRow: View {
             }
             .buttonStyle(.plain)
 
-            // Task info
-            VStack(alignment: .leading, spacing: 2) {
-                Text(task.title)
-                    .font(.system(size: 15))
-                    .strikethrough(task.isDone)
-                    .foregroundStyle(task.isDone ? .secondary : .primary)
-                    .lineLimit(1)
+            // Task info - tappable
+            Button {
+                onTap?()
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(task.title)
+                            .font(.system(size: 15))
+                            .strikethrough(task.isDone)
+                            .foregroundStyle(task.isDone ? .secondary : .primary)
+                            .lineLimit(1)
 
-                if !task.assignees.isEmpty {
-                    HStack(spacing: 4) {
-                        HStack(spacing: -4) {
-                            ForEach(task.assignees.prefix(2)) { assignee in
-                                Circle()
-                                    .fill(Theme.primaryLight)
-                                    .frame(width: 16, height: 16)
-                                    .overlay {
-                                        Text(assignee.avatarInitials)
-                                            .font(.system(size: 7, weight: .bold))
-                                            .foregroundStyle(Theme.primary)
+                        if !task.assignees.isEmpty {
+                            HStack(spacing: 4) {
+                                HStack(spacing: -4) {
+                                    ForEach(task.assignees.prefix(2)) { assignee in
+                                        Circle()
+                                            .fill(Theme.primaryLight)
+                                            .frame(width: 16, height: 16)
+                                            .overlay {
+                                                Text(assignee.avatarInitials)
+                                                    .font(.system(size: 7, weight: .bold))
+                                                    .foregroundStyle(Theme.primary)
+                                            }
                                     }
+                                }
+                                Text(task.assignees.prefix(2).map { $0.displayFirstName }.joined(separator: ", "))
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
                             }
                         }
-                        Text(task.assignees.prefix(2).map { $0.displayFirstName }.joined(separator: ", "))
+                    }
+
+                    Spacer()
+
+                    // Due date if exists
+                    if let dueDate = task.dueDate {
+                        Text(formatDate(dueDate))
                             .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(task.isOverdue ? .red : .secondary)
                     }
                 }
             }
-
-            Spacer()
-
-            // Due date if exists
-            if let dueDate = task.dueDate {
-                Text(formatDate(dueDate))
-                    .font(.system(size: 12))
-                    .foregroundStyle(task.isOverdue ? .red : .secondary)
-            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -300,6 +356,7 @@ struct SimpleTaskRow: View {
 struct SimpleChatBubble: View {
     let message: Message
     @Bindable var viewModel: ProjectChatViewModel
+    var onQuote: (() -> Void)? = nil
 
     private var isCurrentUser: Bool {
         message.sender.id == viewModel.currentUser.id
@@ -327,6 +384,28 @@ struct SimpleChatBubble: View {
                         .foregroundStyle(.secondary)
                 }
 
+                // Quoted message preview
+                if let quoted = message.quotedMessage {
+                    HStack(spacing: 6) {
+                        Rectangle()
+                            .fill(isCurrentUser ? Color.white.opacity(0.5) : Theme.primary.opacity(0.5))
+                            .frame(width: 3)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(quoted.senderName)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(isCurrentUser ? .white.opacity(0.9) : Theme.primary)
+                            Text(quoted.content)
+                                .font(.system(size: 12))
+                                .foregroundStyle(isCurrentUser ? .white.opacity(0.7) : .secondary)
+                                .lineLimit(2)
+                        }
+                    }
+                    .padding(8)
+                    .background(isCurrentUser ? Color.white.opacity(0.15) : Color(uiColor: .systemGray4))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+
                 Text(message.content)
                     .font(.system(size: 15))
                     .foregroundStyle(isCurrentUser ? .white : .primary)
@@ -339,9 +418,118 @@ struct SimpleChatBubble: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 50)
+                    .onEnded { value in
+                        if value.translation.width < -50 {
+                            onQuote?()
+                        }
+                    }
+            )
 
             if !isCurrentUser { Spacer(minLength: 60) }
         }
+    }
+}
+
+// MARK: - Task Info Sheet
+
+struct SimpleTaskInfoSheet: View {
+    let task: DONEOTask
+    @Bindable var viewModel: ProjectChatViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                // Task header
+                Section {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 12) {
+                            Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 28))
+                                .foregroundStyle(task.isDone ? .green : Color.secondary.opacity(0.4))
+
+                            Text(task.title)
+                                .font(.system(size: 18, weight: .semibold))
+                                .strikethrough(task.isDone)
+                        }
+
+                        if let notes = task.notes, !notes.isEmpty {
+                            Text(notes)
+                                .font(.system(size: 15))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                // Assignees
+                if !task.assignees.isEmpty {
+                    Section("Asignado a") {
+                        ForEach(task.assignees) { assignee in
+                            HStack(spacing: 12) {
+                                Circle()
+                                    .fill(Theme.primaryLight)
+                                    .frame(width: 36, height: 36)
+                                    .overlay {
+                                        Text(assignee.avatarInitials)
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundStyle(Theme.primary)
+                                    }
+
+                                Text(assignee.displayName)
+                                    .font(.system(size: 15))
+                            }
+                        }
+                    }
+                }
+
+                // Due date
+                if let dueDate = task.dueDate {
+                    Section("Fecha límite") {
+                        HStack {
+                            Image(systemName: "calendar")
+                                .foregroundStyle(task.isOverdue ? .red : Theme.primary)
+                            Text(dueDate.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                            Spacer()
+                            if task.isOverdue {
+                                Text("Vencida")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(.red)
+                                    .clipShape(Capsule())
+                            }
+                        }
+                    }
+                }
+
+                // Actions
+                Section {
+                    Button {
+                        viewModel.toggleTaskStatus(task)
+                        dismiss()
+                    } label: {
+                        HStack {
+                            Image(systemName: task.isDone ? "arrow.uturn.backward" : "checkmark")
+                            Text(task.isDone ? "Marcar como pendiente" : "Marcar como completada")
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Detalles")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Listo") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }
 
