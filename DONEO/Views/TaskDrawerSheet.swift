@@ -325,6 +325,11 @@ struct AddTaskSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var viewModel: ProjectChatViewModel
 
+    // Optional: for standalone mode (from Activity screen)
+    let isStandaloneMode: Bool
+    let availableProjects: [Project]
+    @State private var selectedProjectId: UUID?
+
     // Task fields
     @State private var taskTitle = ""
     @State private var selectedAssigneeIds: Set<UUID> = []
@@ -362,10 +367,43 @@ struct AddTaskSheet: View {
         var data: Data?
     }
 
+    // Initializer for use within a project
+    init(viewModel: ProjectChatViewModel) {
+        self.viewModel = viewModel
+        self.isStandaloneMode = false
+        self.availableProjects = []
+    }
+
+    // Initializer for standalone mode (Activity screen)
+    init(viewModel: ProjectChatViewModel, availableProjects: [Project]) {
+        self.viewModel = viewModel
+        self.isStandaloneMode = true
+        self.availableProjects = availableProjects
+        self._selectedProjectId = State(initialValue: viewModel.project.id)
+    }
+
+    // Get current project members based on selection
+    private var currentProjectMembers: [User] {
+        if isStandaloneMode, let projectId = selectedProjectId,
+           let project = availableProjects.first(where: { $0.id == projectId }) {
+            return project.members
+        }
+        return viewModel.project.members
+    }
+
+    private var currentUser: User {
+        viewModel.currentUser
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
+                    // Project selection (only in standalone mode)
+                    if isStandaloneMode {
+                        projectSection
+                    }
+
                     // Task title
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Tarea")
@@ -387,7 +425,7 @@ struct AddTaskSheet: View {
                             .foregroundStyle(.secondary)
 
                         FlowLayout(spacing: 8) {
-                            ForEach(viewModel.project.members) { member in
+                            ForEach(currentProjectMembers) { member in
                                 let isSelected = selectedAssigneeIds.contains(member.id)
                                 Button {
                                     if isSelected {
@@ -405,7 +443,7 @@ struct AddTaskSheet: View {
                                                     .font(.system(size: 10, weight: .medium))
                                                     .foregroundStyle(isSelected ? .white : Theme.primary)
                                             }
-                                        Text(member.id == viewModel.currentUser.id ? "Yo" : member.displayFirstName)
+                                        Text(member.id == currentUser.id ? "Yo" : member.displayFirstName)
                                             .font(.system(size: 14, weight: .medium))
                                     }
                                     .padding(.horizontal, 12)
@@ -559,13 +597,13 @@ struct AddTaskSheet: View {
                                     HStack(spacing: 8) {
                                         // Assignees
                                         if !subtask.assigneeIds.isEmpty {
-                                            let assigneeNames = viewModel.project.members
+                                            let assigneeNames = currentProjectMembers
                                                 .filter { subtask.assigneeIds.contains($0.id) }
                                                 .prefix(2)
                                                 .map { $0.displayFirstName }
                                             HStack(spacing: 4) {
                                                 HStack(spacing: -4) {
-                                                    ForEach(viewModel.project.members.filter { subtask.assigneeIds.contains($0.id) }.prefix(2)) { member in
+                                                    ForEach(currentProjectMembers.filter { subtask.assigneeIds.contains($0.id) }.prefix(2)) { member in
                                                         Circle()
                                                             .fill(Theme.primaryLight)
                                                             .frame(width: 16, height: 16)
@@ -678,6 +716,7 @@ struct AddTaskSheet: View {
             .sheet(isPresented: $showingAddSubtask) {
                 AddSubtaskToNewTaskSheet(
                     viewModel: viewModel,
+                    projectMembers: currentProjectMembers,
                     taskAssigneeIds: selectedAssigneeIds,
                     onAdd: { subtaskData in
                         subtasks.append(subtaskData)
@@ -687,16 +726,62 @@ struct AddTaskSheet: View {
         }
     }
 
+    // MARK: - Project Section
+
+    private var projectSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Proyecto")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(availableProjects) { project in
+                        let isSelected = selectedProjectId == project.id
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedProjectId = project.id
+                                // Clear assignee selection when project changes
+                                selectedAssigneeIds.removeAll()
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(isSelected ? Color.white.opacity(0.3) : Theme.primaryLight)
+                                    .frame(width: 32, height: 32)
+                                    .overlay {
+                                        Text(project.initials)
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundStyle(isSelected ? .white : Theme.primary)
+                                    }
+
+                                Text(project.name)
+                                    .font(.system(size: 14, weight: .medium))
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(isSelected ? Theme.primary : Color(uiColor: .secondarySystemBackground))
+                            .foregroundStyle(isSelected ? .white : .primary)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
     private func createTask() {
-        let assignees = viewModel.project.members.filter { selectedAssigneeIds.contains($0.id) }
+        let assignees = currentProjectMembers.filter { selectedAssigneeIds.contains($0.id) }
         let subtaskList = subtasks.map { subtaskData -> Subtask in
-            let subtaskAssignees = viewModel.project.members.filter { subtaskData.assigneeIds.contains($0.id) }
+            let subtaskAssignees = currentProjectMembers.filter { subtaskData.assigneeIds.contains($0.id) }
             return Subtask(
                 title: subtaskData.title,
                 description: subtaskData.description,
                 assignees: subtaskAssignees,
                 dueDate: subtaskData.dueDate,
-                createdBy: viewModel.currentUser
+                createdBy: currentUser
             )
         }
         let notesText = notes.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -708,7 +793,7 @@ struct AddTaskSheet: View {
                 category: .reference,
                 fileName: att.fileName,
                 fileSize: Int64.random(in: 50000...500000),
-                uploadedBy: viewModel.currentUser
+                uploadedBy: currentUser
             )
         }
 
@@ -888,6 +973,7 @@ struct AttachmentChip: View {
 
 struct AddSubtaskToNewTaskSheet: View {
     @Bindable var viewModel: ProjectChatViewModel
+    let projectMembers: [User]
     let taskAssigneeIds: Set<UUID>
     let onAdd: (AddTaskSheet.NewSubtaskData) -> Void
     @Environment(\.dismiss) private var dismiss
@@ -908,9 +994,9 @@ struct AddSubtaskToNewTaskSheet: View {
     // Available assignees - from task assignees or all members if none selected
     private var availableAssignees: [User] {
         if taskAssigneeIds.isEmpty {
-            return viewModel.project.members
+            return projectMembers
         }
-        return viewModel.project.members.filter { taskAssigneeIds.contains($0.id) }
+        return projectMembers.filter { taskAssigneeIds.contains($0.id) }
     }
 
     var body: some View {

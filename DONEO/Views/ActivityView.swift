@@ -118,6 +118,7 @@ struct ActivityView: View {
     @State private var selectedFilter: TaskFilter = .all
     @State private var selectedSort: TaskSort = .dueDate
     @State private var showingSortOptions = false
+    @State private var showingAddTask = false
 
     // Filtered tasks based on selection
     private var filteredTasks: [ActivityViewModel.TaskItem] {
@@ -185,6 +186,25 @@ struct ActivityView: View {
                     }
                 }
                 Button("Cancelar", role: .cancel) { }
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showingAddTask = true
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundStyle(Theme.primary)
+                    }
+                }
+            }
+            .sheet(isPresented: $showingAddTask) {
+                if let firstProject = MockDataService.shared.projects.first {
+                    AddTaskSheet(
+                        viewModel: ProjectChatViewModel(project: firstProject),
+                        availableProjects: MockDataService.shared.projects
+                    )
+                }
             }
         }
     }
