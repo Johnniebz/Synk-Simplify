@@ -37,7 +37,17 @@ struct ProjectChatView: View {
         }
         .background(Color(uiColor: .systemBackground))
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
         .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.primary)
+                }
+            }
             ToolbarItem(placement: .principal) {
                 // Tappable header - navigates to info screen
                 Button {
@@ -91,15 +101,27 @@ struct ProjectChatView: View {
     // MARK: - Header
 
     private var headerView: some View {
-        VStack(spacing: 1) {
-            Text(viewModel.project.name)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
+        HStack(spacing: 10) {
+            // Avatar circle
+            Circle()
+                .fill(Theme.primaryLight)
+                .frame(width: 36, height: 36)
+                .overlay {
+                    Text(viewModel.project.initials)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Theme.primary)
+                }
 
-            Text("\(viewModel.project.members.count) miembros")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(viewModel.project.name)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text("\(viewModel.project.members.count) miembros")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
