@@ -333,7 +333,8 @@ struct AddTaskSheet: View {
 
     // Task fields
     @State private var taskTitle = ""
-    @State private var taskLocation = ""
+    @State private var taskLocation = ""  // Project context (e.g., "Downtown Building")
+    @State private var taskAddress = ""   // Map address
     @State private var selectedAssigneeIds: Set<UUID> = []
     @State private var dueDate: Date? = nil
     @State private var showingDatePicker = false
@@ -419,24 +420,12 @@ struct AddTaskSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                             .focused($focusedField, equals: .title)
 
-                        // Project/location context field with map button
-                        HStack(spacing: 10) {
-                            // Map button - opens address in Maps
-                            Button {
-                                openInMaps()
-                            } label: {
-                                Image(systemName: "map.circle.fill")
-                                    .font(.system(size: 24))
-                                    .foregroundStyle(taskLocation.isEmpty ? .secondary : Theme.primary)
-                            }
-                            .disabled(taskLocation.trimmingCharacters(in: .whitespaces).isEmpty)
-
-                            TextField("Ej: Calle Principal 123, Centro...", text: $taskLocation)
-                                .font(.system(size: 15))
-                        }
-                        .padding(12)
-                        .background(Color(uiColor: .secondarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        // Project context field (simple text)
+                        TextField("Ej: Edificio Centro, Cocina principal...", text: $taskLocation)
+                            .font(.system(size: 15))
+                            .padding(14)
+                            .background(Color(uiColor: .secondarySystemBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
 
                     // Assignees as chips
@@ -595,6 +584,34 @@ struct AddTaskSheet: View {
                                 }
                             }
                         }
+                    }
+
+                    // Location/Address with map button
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Ubicación")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.secondary)
+
+                        HStack(spacing: 10) {
+                            TextField("Ej: Calle Principal 123, Ciudad...", text: $taskAddress)
+                                .font(.system(size: 15))
+
+                            // Map button - opens address in Maps
+                            Button {
+                                openInMaps()
+                            } label: {
+                                Image(systemName: "map.fill")
+                                    .font(.system(size: 18))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 36, height: 36)
+                                    .background(taskAddress.trimmingCharacters(in: .whitespaces).isEmpty ? Color.secondary : Theme.primary)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                            }
+                            .disabled(taskAddress.trimmingCharacters(in: .whitespaces).isEmpty)
+                        }
+                        .padding(12)
+                        .background(Color(uiColor: .secondarySystemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
 
                     // Subtasks
@@ -807,17 +824,23 @@ struct AddTaskSheet: View {
             )
         }
 
-        // Combine location and notes
-        let locationText = taskLocation.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Combine project context, address, and notes
+        let contextText = taskLocation.trimmingCharacters(in: .whitespacesAndNewlines)
+        let addressText = taskAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         let notesText = notes.trimmingCharacters(in: .whitespacesAndNewlines)
-        var finalNotes: String? = nil
-        if !locationText.isEmpty && !notesText.isEmpty {
-            finalNotes = "📍 \(locationText)\n\n\(notesText)"
-        } else if !locationText.isEmpty {
-            finalNotes = "📍 \(locationText)"
-        } else if !notesText.isEmpty {
-            finalNotes = notesText
+
+        var noteParts: [String] = []
+        if !contextText.isEmpty {
+            noteParts.append("🏢 \(contextText)")
         }
+        if !addressText.isEmpty {
+            noteParts.append("📍 \(addressText)")
+        }
+        if !notesText.isEmpty {
+            noteParts.append(notesText)
+        }
+
+        let finalNotes: String? = noteParts.isEmpty ? nil : noteParts.joined(separator: "\n\n")
 
         // Create attachments for the task
         let taskAttachments = attachments.map { att in
@@ -853,7 +876,7 @@ struct AddTaskSheet: View {
     }
 
     private func openInMaps() {
-        let address = taskLocation.trimmingCharacters(in: .whitespaces)
+        let address = taskAddress.trimmingCharacters(in: .whitespaces)
         guard !address.isEmpty else { return }
 
         // URL encode the address and open in Apple Maps
