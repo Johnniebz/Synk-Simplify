@@ -573,72 +573,151 @@ struct SimpleTaskInfoSheet: View {
     let task: DONEOTask
     @Bindable var viewModel: ProjectChatViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var showingAddMedia = false
+    @State private var showingImagePicker = false
+    @State private var selectedPhotoItem: PhotosPickerItem? = nil
+
+    private var imageAttachments: [Attachment] {
+        task.attachments.filter { $0.type == .image }
+    }
+
+    private var documentAttachments: [Attachment] {
+        task.attachments.filter { $0.type == .document }
+    }
 
     var body: some View {
         NavigationStack {
             List {
-                // Task header
-                Section {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(spacing: 12) {
-                            Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 28))
-                                .foregroundStyle(task.isDone ? .green : Color.secondary.opacity(0.4))
+                // Instructions
+                if let notes = task.notes, !notes.isEmpty {
+                    Section {
+                        Text(notes)
+                            .font(.system(size: 15))
+                    } header: {
+                        Text("Instrucciones")
+                            .foregroundStyle(Theme.primary)
+                    }
+                }
 
-                            Text(task.title)
-                                .font(.system(size: 18, weight: .semibold))
-                                .strikethrough(task.isDone)
-                        }
+                // Individual file attachments
+                if !task.attachments.isEmpty {
+                    Section {
+                        ForEach(task.attachments) { attachment in
+                            HStack(spacing: 12) {
+                                // File icon
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(attachment.type == .document ? Color.orange.opacity(0.15) : Color.blue.opacity(0.15))
+                                    .frame(width: 40, height: 40)
+                                    .overlay {
+                                        Image(systemName: attachment.type == .document ? "doc.fill" : "photo.fill")
+                                            .font(.system(size: 16))
+                                            .foregroundStyle(attachment.type == .document ? .orange : .blue)
+                                    }
 
-                        if let notes = task.notes, !notes.isEmpty {
-                            Text(notes)
-                                .font(.system(size: 15))
-                                .foregroundStyle(.secondary)
+                                Text(attachment.fileName)
+                                    .font(.system(size: 15))
+                                    .lineLimit(1)
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.vertical, 4)
                         }
                     }
-                    .padding(.vertical, 4)
                 }
 
                 // Assignees
                 if !task.assignees.isEmpty {
-                    Section("Asignado a") {
+                    Section {
                         ForEach(task.assignees) { assignee in
                             HStack(spacing: 12) {
                                 Circle()
                                     .fill(Theme.primaryLight)
-                                    .frame(width: 36, height: 36)
+                                    .frame(width: 44, height: 44)
                                     .overlay {
                                         Text(assignee.avatarInitials)
-                                            .font(.system(size: 12, weight: .bold))
+                                            .font(.system(size: 14, weight: .bold))
                                             .foregroundStyle(Theme.primary)
                                     }
 
-                                Text(assignee.displayName)
-                                    .font(.system(size: 15))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(assignee.displayName)
+                                        .font(.system(size: 16, weight: .medium))
+                                    Text(assignee.phoneNumber)
+                                        .font(.system(size: 14))
+                                        .foregroundStyle(.secondary)
+                                }
                             }
+                            .padding(.vertical, 2)
                         }
+                    } header: {
+                        Text("\(task.assignees.count) Asignado\(task.assignees.count == 1 ? "" : "s")")
+                            .foregroundStyle(Theme.primary)
                     }
                 }
 
-                // Due date
-                if let dueDate = task.dueDate {
-                    Section("Fecha límite") {
-                        HStack {
-                            Image(systemName: "calendar")
-                                .foregroundStyle(task.isOverdue ? .red : Theme.primary)
-                            Text(dueDate.formatted(.dateTime.weekday(.wide).month(.wide).day()))
-                            Spacer()
-                            if task.isOverdue {
-                                Text("Vencida")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(.red)
-                                    .clipShape(Capsule())
-                            }
+                // Multimedia y Documentos summary
+                Section {
+                    // Photos row
+                    HStack(spacing: 12) {
+                        Image(systemName: "photo.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(Theme.primary)
+
+                        Text("Fotos")
+                            .font(.system(size: 15))
+
+                        Spacer()
+
+                        Text("\(imageAttachments.count)")
+                            .font(.system(size: 15))
+                            .foregroundStyle(.secondary)
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(.tertiary)
+                    }
+
+                    // Documents row
+                    HStack(spacing: 12) {
+                        Image(systemName: "doc.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(Theme.primary)
+
+                        Text("Documentos")
+                            .font(.system(size: 15))
+
+                        Spacer()
+
+                        Text("\(documentAttachments.count)")
+                            .font(.system(size: 15))
+                            .foregroundStyle(.secondary)
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(.tertiary)
+                    }
+
+                    // Add media button
+                    Button {
+                        showingAddMedia = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 20))
+                                .foregroundStyle(Theme.primary)
+
+                            Text("Agregar multimedia")
+                                .font(.system(size: 15))
+                                .foregroundStyle(Theme.primary)
                         }
                     }
+                } header: {
+                    Text("Multimedia y Documentos")
+                        .foregroundStyle(Theme.primary)
                 }
 
                 // Actions
@@ -648,17 +727,47 @@ struct SimpleTaskInfoSheet: View {
                         dismiss()
                     } label: {
                         HStack {
-                            Image(systemName: task.isDone ? "arrow.uturn.backward" : "checkmark")
+                            Spacer()
                             Text(task.isDone ? "Marcar como pendiente" : "Marcar como completada")
+                            Spacer()
                         }
                     }
                 }
             }
-            .navigationTitle("Detalles")
+            .navigationTitle("Info de Tarea")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Listo") { dismiss() }
+                }
+            }
+            .confirmationDialog("Agregar multimedia", isPresented: $showingAddMedia) {
+                Button {
+                    showingImagePicker = true
+                } label: {
+                    Label("Fotos y Videos", systemImage: "photo.on.rectangle")
+                }
+                Button {
+                    // Camera
+                } label: {
+                    Label("Cámara", systemImage: "camera")
+                }
+                Button {
+                    // Document picker
+                } label: {
+                    Label("Documento", systemImage: "doc")
+                }
+                Button("Cancelar", role: .cancel) { }
+            }
+            .photosPicker(isPresented: $showingImagePicker, selection: $selectedPhotoItem, matching: .images)
+            .onChange(of: selectedPhotoItem) { _, newValue in
+                Task {
+                    if let item = newValue,
+                       let _ = try? await item.loadTransferable(type: Data.self) {
+                        // Add attachment to task
+                        // viewModel.addDeliverableToTask(task, type: .image, fileName: "foto.jpg")
+                    }
+                    selectedPhotoItem = nil
                 }
             }
         }
