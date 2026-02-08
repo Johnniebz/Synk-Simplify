@@ -36,6 +36,7 @@ struct TaskDrawerSheet: View {
             }
             .sheet(isPresented: $showingAddTask) {
                 AddTaskSheet(viewModel: viewModel)
+                    .presentationDetents([.large])
             }
         }
     }

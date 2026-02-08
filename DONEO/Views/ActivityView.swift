@@ -204,6 +204,7 @@ struct ActivityView: View {
                         viewModel: ProjectChatViewModel(project: firstProject),
                         availableProjects: MockDataService.shared.projects
                     )
+                    .presentationDetents([.large])
                 }
             }
         }

@@ -81,7 +81,8 @@ struct ProjectChatView: View {
             SimpleTaskInfoSheet(task: task, viewModel: viewModel)
         }
         .sheet(isPresented: $showingAddTask) {
-            SimpleAddTaskSheet(viewModel: viewModel)
+            AddTaskSheet(viewModel: viewModel)
+                .presentationDetents([.large])
         }
         .confirmationDialog("Adjuntar", isPresented: $showingAttachmentOptions) {
             Button {
