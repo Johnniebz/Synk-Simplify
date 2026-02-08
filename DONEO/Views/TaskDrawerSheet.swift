@@ -419,13 +419,18 @@ struct AddTaskSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                             .focused($focusedField, equals: .title)
 
-                        // Project/location context field
-                        TextField("Ej: Edificio Centro, Cocina principal...", text: $taskLocation)
-                            .font(.system(size: 15))
-                            .foregroundStyle(.secondary)
-                            .padding(14)
-                            .background(Color(uiColor: .secondarySystemBackground))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        // Project/location context field with location button
+                        HStack(spacing: 10) {
+                            Image(systemName: "mappin.circle.fill")
+                                .font(.system(size: 22))
+                                .foregroundStyle(Theme.primary)
+
+                            TextField("Ej: Edificio Centro, Cocina...", text: $taskLocation)
+                                .font(.system(size: 15))
+                        }
+                        .padding(12)
+                        .background(Color(uiColor: .secondarySystemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
 
                     // Assignees as chips
