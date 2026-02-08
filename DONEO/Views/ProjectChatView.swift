@@ -77,8 +77,8 @@ struct ProjectChatView: View {
         .navigationDestination(isPresented: $showingProjectInfo) {
             ProjectInfoView(viewModel: viewModel)
         }
-        .navigationDestination(item: $selectedTaskForNavigation) { task in
-            TaskDetailView(task: task, viewModel: viewModel)
+        .sheet(item: $selectedTaskForNavigation) { task in
+            SimpleTaskInfoSheet(task: task, viewModel: viewModel)
         }
         .sheet(isPresented: $showingAddTask) {
             SimpleAddTaskSheet(viewModel: viewModel)
