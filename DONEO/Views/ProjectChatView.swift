@@ -57,6 +57,21 @@ struct ProjectChatView: View {
                 }
                 .buttonStyle(.plain)
             }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                // Avatar - navigates to info screen
+                Button {
+                    showingProjectInfo = true
+                } label: {
+                    Circle()
+                        .fill(Theme.primaryLight)
+                        .frame(width: 36, height: 36)
+                        .overlay {
+                            Text(viewModel.project.initials)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(Theme.primary)
+                        }
+                }
+            }
         }
         .toolbar(.hidden, for: .tabBar)
         .navigationDestination(isPresented: $showingProjectInfo) {
@@ -101,27 +116,15 @@ struct ProjectChatView: View {
     // MARK: - Header
 
     private var headerView: some View {
-        HStack(spacing: 10) {
-            // Avatar circle
-            Circle()
-                .fill(Theme.primaryLight)
-                .frame(width: 36, height: 36)
-                .overlay {
-                    Text(viewModel.project.initials)
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Theme.primary)
-                }
+        VStack(spacing: 1) {
+            Text(viewModel.project.name)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(viewModel.project.name)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-
-                Text("\(viewModel.project.members.count) miembros")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-            }
+            Text("\(viewModel.project.members.count) miembros")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
         }
     }
 
