@@ -9,6 +9,7 @@ struct ProjectChatView: View {
     @State private var messageText = ""
     @State private var selectedTask: DONEOTask? = nil  // For task info sheet
     @State private var quotedMessage: Message? = nil   // For quoting messages
+    @State private var quotedTask: DONEOTask? = nil    // For quoting/referencing tasks
     @FocusState private var isInputFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
@@ -139,18 +140,29 @@ struct ProjectChatView: View {
     }
 
     private var tasksList: some View {
-        VStack(spacing: 0) {
+        List {
             ForEach(sortedTasks) { task in
                 SimpleTaskRow(task: task, viewModel: viewModel, onTap: {
                     selectedTask = task
                 })
-
-                if task.id != sortedTasks.last?.id {
-                    Divider()
-                        .padding(.leading, 52)
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color(uiColor: .secondarySystemBackground))
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button {
+                        quotedTask = task
+                        quotedMessage = nil  // Clear any quoted message
+                        isInputFocused = true
+                    } label: {
+                        Label("Citar", systemImage: "arrowshape.turn.up.left.fill")
+                    }
+                    .tint(Theme.primary)
                 }
             }
         }
+        .listStyle(.plain)
+        .frame(maxHeight: CGFloat(min(sortedTasks.count, 5)) * 60)  // Limit height
+        .scrollDisabled(sortedTasks.count <= 5)
         .background(Color(uiColor: .secondarySystemBackground))
         .transition(.opacity.combined(with: .move(edge: .top)))
     }
@@ -236,6 +248,43 @@ struct ProjectChatView: View {
                 .background(Color(uiColor: .secondarySystemBackground))
             }
 
+            // Quoted task preview
+            if let task = quotedTask {
+                HStack(spacing: 10) {
+                    Rectangle()
+                        .fill(Theme.primary)
+                        .frame(width: 3)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checklist")
+                                .font(.system(size: 11))
+                            Text("Tarea")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .foregroundStyle(Theme.primary)
+
+                        Text(task.title)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        quotedTask = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(Color.secondary.opacity(0.5))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color(uiColor: .secondarySystemBackground))
+            }
+
             HStack(spacing: 12) {
                 // Text field
                 TextField("Mensaje...", text: $messageText)
@@ -268,10 +317,12 @@ struct ProjectChatView: View {
         guard !text.isEmpty else { return }
 
         let quoted = quotedMessage.map { QuotedMessage(message: $0) }
-        viewModel.sendMessage(content: text, quotedMessage: quoted)
+        let taskRef = quotedTask.map { TaskReference(task: $0) }
+        viewModel.sendMessage(content: text, referencedTask: taskRef, quotedMessage: quoted)
 
         messageText = ""
         quotedMessage = nil
+        quotedTask = nil
     }
 }
 
