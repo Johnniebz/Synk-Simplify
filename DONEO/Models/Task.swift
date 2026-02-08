@@ -71,6 +71,10 @@ struct DONEOTask: Identifiable, Hashable {
         guard let dueDate = dueDate else { return false }
         return Calendar.current.isDateInTomorrow(dueDate)
     }
+
+    var isDone: Bool {
+        status == .done
+    }
 }
 
 enum TaskStatus: String, CaseIterable {
