@@ -419,13 +419,19 @@ struct AddTaskSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                             .focused($focusedField, equals: .title)
 
-                        // Project/location context field with location button
+                        // Project/location context field with map button
                         HStack(spacing: 10) {
-                            Image(systemName: "mappin.circle.fill")
-                                .font(.system(size: 22))
-                                .foregroundStyle(Theme.primary)
+                            // Map button - opens address in Maps
+                            Button {
+                                openInMaps()
+                            } label: {
+                                Image(systemName: "map.circle.fill")
+                                    .font(.system(size: 24))
+                                    .foregroundStyle(taskLocation.isEmpty ? .secondary : Theme.primary)
+                            }
+                            .disabled(taskLocation.trimmingCharacters(in: .whitespaces).isEmpty)
 
-                            TextField("Ej: Edificio Centro, Cocina...", text: $taskLocation)
+                            TextField("Ej: Calle Principal 123, Centro...", text: $taskLocation)
                                 .font(.system(size: 15))
                         }
                         .padding(12)
@@ -843,6 +849,17 @@ struct AddTaskSheet: View {
             return "Manana"
         } else {
             return date.formatted(.dateTime.month(.abbreviated).day())
+        }
+    }
+
+    private func openInMaps() {
+        let address = taskLocation.trimmingCharacters(in: .whitespaces)
+        guard !address.isEmpty else { return }
+
+        // URL encode the address and open in Apple Maps
+        if let encoded = address.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+           let url = URL(string: "maps://?q=\(encoded)") {
+            UIApplication.shared.open(url)
         }
     }
 }
