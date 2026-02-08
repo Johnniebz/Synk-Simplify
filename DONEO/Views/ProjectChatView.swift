@@ -828,7 +828,7 @@ struct ProjectInfoView: View {
             // Media, links and docs
             Section {
                 NavigationLink {
-                    Text("Multimedia y Documentos")
+                    ProjectMediaView(viewModel: viewModel)
                 } label: {
                     HStack {
                         Image(systemName: "photo.fill")
@@ -972,6 +972,170 @@ struct ProjectInfoView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+// MARK: - Project Media View (Organized by Task)
+
+struct ProjectMediaView: View {
+    @Bindable var viewModel: ProjectChatViewModel
+
+    // Tasks that have attachments
+    private var tasksWithMedia: [DONEOTask] {
+        viewModel.tasks.filter { !$0.attachments.isEmpty }
+    }
+
+    // General project attachments (not linked to a specific task)
+    private var generalAttachments: [ProjectAttachment] {
+        viewModel.project.attachments.filter { $0.linkedTaskId == nil }
+    }
+
+    var body: some View {
+        List {
+            // General project media (not linked to tasks)
+            if !generalAttachments.isEmpty {
+                Section {
+                    ForEach(generalAttachments) { attachment in
+                        MediaAttachmentRow(
+                            fileName: attachment.fileName,
+                            type: attachment.type,
+                            uploadedBy: attachment.uploadedBy.displayFirstName,
+                            date: attachment.uploadedAt
+                        )
+                    }
+                } header: {
+                    HStack {
+                        Image(systemName: "folder.fill")
+                            .foregroundStyle(Theme.primary)
+                        Text("General")
+                            .foregroundStyle(Theme.primary)
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                }
+            }
+
+            // Media organized by task
+            ForEach(tasksWithMedia) { task in
+                Section {
+                    // Show task attachments
+                    ForEach(task.attachments) { attachment in
+                        MediaAttachmentRow(
+                            fileName: attachment.fileName,
+                            type: attachment.type,
+                            uploadedBy: attachment.uploadedBy.displayFirstName,
+                            date: attachment.uploadedAt
+                        )
+                    }
+                } header: {
+                    HStack(spacing: 8) {
+                        Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 14))
+                            .foregroundStyle(task.isDone ? .green : Theme.primary)
+
+                        Text(task.title)
+                            .foregroundStyle(Theme.primary)
+                            .font(.system(size: 15, weight: .semibold))
+                            .lineLimit(1)
+
+                        Spacer()
+
+                        Text("\(task.attachments.count)")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            // Empty state
+            if tasksWithMedia.isEmpty && generalAttachments.isEmpty {
+                Section {
+                    VStack(spacing: 12) {
+                        Image(systemName: "photo.on.rectangle.angled")
+                            .font(.system(size: 50))
+                            .foregroundStyle(Color.secondary.opacity(0.3))
+
+                        Text("Sin multimedia")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.secondary)
+
+                        Text("Los archivos subidos a las tareas aparecerán aquí organizados")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.secondary.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+                }
+            }
+        }
+        .navigationTitle("Multimedia y Documentos")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Media Attachment Row
+
+struct MediaAttachmentRow: View {
+    let fileName: String
+    let type: AttachmentType
+    let uploadedBy: String
+    let date: Date
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // File icon
+            RoundedRectangle(cornerRadius: 8)
+                .fill(iconBackgroundColor)
+                .frame(width: 44, height: 44)
+                .overlay {
+                    Image(systemName: iconName)
+                        .font(.system(size: 18))
+                        .foregroundStyle(iconColor)
+                }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(fileName)
+                    .font(.system(size: 15, weight: .medium))
+                    .lineLimit(1)
+
+                HStack(spacing: 4) {
+                    Text(uploadedBy)
+                    Text("·")
+                    Text(date.formatted(.dateTime.month(.abbreviated).day()))
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var iconName: String {
+        switch type {
+        case .image: return "photo.fill"
+        case .document: return "doc.fill"
+        case .video: return "video.fill"
+        case .contact: return "person.crop.circle.fill"
+        }
+    }
+
+    private var iconColor: Color {
+        switch type {
+        case .image: return .blue
+        case .document: return .orange
+        case .video: return .purple
+        case .contact: return .green
+        }
+    }
+
+    private var iconBackgroundColor: Color {
+        iconColor.opacity(0.15)
     }
 }
 
